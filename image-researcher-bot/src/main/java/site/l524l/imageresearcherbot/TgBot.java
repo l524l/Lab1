@@ -2,57 +2,77 @@ package site.l524l.imageresearcherbot;
 
 
 import java.nio.file.Files;
-import java.nio.file.attribute.FileAttribute;
 import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.bots.TelegramWebhookBot;
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendVideoNote;
-import org.telegram.telegrambots.meta.api.methods.updates.SetWebhook;
 import org.telegram.telegrambots.meta.api.objects.File;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.Video;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 @Component
 public class TgBot extends TelegramWebhookBot {
-  public TgBot() {
+	@Value("${bot.path}")
+	private String path;
+	@Value("${bot.username}")
+	private String username;
+	@Value("${bot.token}")
+	private String token;
+	@Value("${bot.tempFileFolder}")
+	private String tempFileFolder;
+	
+	public TgBot() {
    
   }
   
   public BotApiMethod<?> onWebhookUpdateReceived(Update update) {
-	java.io.File f = null;
-    if (update.getMessage().hasVideo()) {
-      try {
-        String name = "/opt/tomcat/webapps/temp/f" + UUID.randomUUID() + ".mp4";
-        String p = ((File)execute((BotApiMethod)GetFile.builder().fileId(update.getMessage().getVideo().getFileId()).build())).getFilePath();
-        f = new java.io.File(name);
-        downloadFile(p, f);
-        if (!f.exists())
-          Files.createFile(f.toPath(), (FileAttribute<?>[])new FileAttribute[0]); 
-        SendVideoNote n = SendVideoNote.builder().chatId(update.getMessage().getChatId()).videoNote(new InputFile(f)).build();
-        execute(n);
-        Files.deleteIfExists(f.toPath());
-      } catch (TelegramApiException|java.io.IOException e) {
-        SendMessage m = SendMessage.builder().chatId(update.getMessage().getChatId()).text("").build();
-        return (BotApiMethod<?>)m;
-      } 
-      return null;
+	  String name = tempFileFolder + "f" + UUID.randomUUID() + ".mp4";
+	  java.io.File tempFile = new java.io.File(name);
+	
+	  long chatId = update.getMessage().getChatId();
+	
+	  if (update.getMessage().hasVideo()) {
+    	Video tgVideo = update.getMessage().getVideo();
+    	
+    	if (tgVideo.getDuration() > 60) {
+    		return SendMessage.builder().chatId(chatId).text("Длительность видео привышает 60 секунд").build();
+    	}
+    	if (!tgVideo.getWidth().equals(tgVideo.getHeight()) || tgVideo.getHeight() > 384 || tgVideo.getWidth() > 384) {
+    		return SendMessage.builder().chatId(chatId).text("Видео должно иметь соотношение сторон 1 к 1, и иметь разрешение не больше 384 на 384 пиксилей").build();
+    	}
+    	
+    	try {
+    		File fileInfo = execute(GetFile.builder().fileId(tgVideo.getFileId()).build());
+    		
+    		String fileURL = fileInfo.getFilePath();
+    		downloadFile(fileURL, tempFile); 
+    		
+    		execute(SendVideoNote.builder().chatId(chatId).videoNote(new InputFile(tempFile)).build());
+    		
+    		Files.deleteIfExists(tempFile.toPath());
+    	} catch (TelegramApiException|java.io.IOException e) {
+    		return SendMessage.builder().chatId(chatId).text("Ошибка на нашей стороне. Попытайтесь повторить запрос позднее").build();
+     } 
     } 
     return null;
   }
   
   public String getBotPath() {
-    return "https://89.19.209.199:8443/bot/";
+    return path;
   }
   
   public String getBotUsername() {
-    return "ImageResearcherBot";
+    return username;
   }
   
   public String getBotToken() {
-    return "token";
+    return token;
   }
 }
