@@ -11,6 +11,7 @@ import org.telegram.telegrambots.meta.api.methods.BotApiMethod;
 import org.telegram.telegrambots.meta.api.methods.GetFile;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendVideoNote;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.meta.api.objects.File;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -37,19 +38,22 @@ public class TgBot extends TelegramWebhookBot {
 	  java.io.File tempFile = new java.io.File(name);
 	
 	  long chatId = update.getMessage().getChatId();
-	
+	  int messageId = update.getMessage().getMessageId();
+	  
+	  
 	  if (update.getMessage().hasVideo()) {
     	Video tgVideo = update.getMessage().getVideo();
-    	
-    	if (tgVideo.getDuration() > 60) {
-    		return SendMessage.builder().chatId(chatId).text("Длительность видео привышает 60 секунд").build();
-    	}
-    	if (!tgVideo.getWidth().equals(tgVideo.getHeight()) || tgVideo.getHeight() > 384 || tgVideo.getWidth() > 384) {
-    		return SendMessage.builder().chatId(chatId).text("Видео должно иметь соотношение сторон 1 к 1, и иметь разрешение не больше 384 на 384 пиксилей").build();
-    	}
-    	
-    	try {
-    		File fileInfo = execute(GetFile.builder().fileId(tgVideo.getFileId()).build());
+    	 try {
+	    	if (tgVideo.getDuration() > 60) {
+	    		execute(DeleteMessage.builder().chatId(chatId).messageId(messageId).build());
+	    		return SendMessage.builder().chatId(chatId).text("Длительность видео привышает 60 секунд").build();
+	    	}
+	    	if (!tgVideo.getWidth().equals(tgVideo.getHeight()) || tgVideo.getHeight() > 384 || tgVideo.getWidth() > 384) {
+	    		execute(DeleteMessage.builder().chatId(chatId).messageId(messageId).build());
+	    		return SendMessage.builder().chatId(chatId).text("Видео должно иметь соотношение сторон 1 к 1, и иметь разрешение не больше 384 на 384 пиксилей").build();
+	    	}
+	    	
+    	 	File fileInfo = execute(GetFile.builder().fileId(tgVideo.getFileId()).build());
     		
     		String fileURL = fileInfo.getFilePath();
     		downloadFile(fileURL, tempFile); 
@@ -57,11 +61,14 @@ public class TgBot extends TelegramWebhookBot {
     		execute(SendVideoNote.builder().chatId(chatId).videoNote(new InputFile(tempFile)).build());
     		
     		Files.deleteIfExists(tempFile.toPath());
+    		
+    		return DeleteMessage.builder().chatId(chatId).messageId(messageId).build();
     	} catch (TelegramApiException|java.io.IOException e) {
     		return SendMessage.builder().chatId(chatId).text("Ошибка на нашей стороне. Попытайтесь повторить запрос позднее").build();
-     } 
-    } 
-    return null;
+    	} 
+	  }
+	  
+	  return SendMessage.builder().chatId(chatId).text("Не понял Вас) Попробуйте отправить видео").build(); 
   }
   
   public String getBotPath() {
